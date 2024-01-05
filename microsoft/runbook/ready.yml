@@ -3,7 +3,7 @@ include:
   - path: ./debug.yml
 variable:
   - name: user_name
-    value: "lisatest"
+    value: "azureuser"
   - name: public_port
     value: 22
   - name: origin
@@ -16,13 +16,17 @@ environment:
   environments:
     - nodes:
         - type: remote
-          public_address: $(public_address)
-          public_port: $(public_port)
+          public_address: 74.235.187.194
+          public_port: 22
           username: $(user_name)
-          private_key_file: $(admin_private_key_file)
-          capability:
-            disk:
-              data_disk_count:
-                min: 1
+          # private_key_file: $(admin_private_key_file)
+          password: password@123123
+          # capability:
+          #   disk:
+          #     data_disk_count:
+          #       min: 1
 platform:
   - type: ready
+testcase:
+  - criteria:
+      name: smoke_test

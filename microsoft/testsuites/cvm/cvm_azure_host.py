@@ -16,10 +16,54 @@ from lisa import (
 )
 from lisa.operating_system import CBLMariner
 from lisa.sut_orchestrator.azure import features
+from lisa.features.security_profile import CvmEnabled
 from lisa.testsuite import TestResult, simple_requirement
 from lisa.tools import Cat, Dmesg
 from lisa.util import LisaException, SkippedException, get_matched_str
 
+#######################################################################
+@TestSuiteMetadata(
+    area="cvm",
+    category="functional",
+    description="""
+    This test suite is for azure host vm pre-checks
+    for sev-snp enablement for general vms
+    """,
+)
+
+class CVMAzureHostSEVSNPTestSuite(TestSuite):
+
+    __sev_enabled_pattern_gen = re.compile(r"Memory Encryption Features active: AMD SEV") 
+
+    @TestCaseMetadata(
+            description="""
+            checks whether sev-snp is enabled for cvm.
+            """,
+            priority=3,
+            requirement=simple_requirement(
+            supported_features=[CvmEnabled()],
+            ),
+    )
+
+    def verify_azure_vm_snp_gen_enablement(
+        self,
+        log: Logger,
+        node: Node,
+        environment: Environment,
+        log_path: Path,
+        result: TestResult,
+        variables: Dict[str, Any],
+    ) -> None :
+        dmesg: str = node.tools[Dmesg].get_output(force_run=True)
+
+        is_sev_enabled: str = get_matched_str(
+            pattern=self.__sev_enabled_pattern_gen,
+            content=dmesg,
+            first_match=True,
+        )
+        if not is_sev_enabled:
+            raise LisaException("SEV_SNP is not enabled")
+#######################################################################
 
 @TestSuiteMetadata(
     area="cvm",
@@ -34,7 +78,6 @@ class CVMAzureHostTestSuite(TestSuite):
     __sev_partition_pattern = re.compile(
         r"mshv: Maximum supported SEV-SNP partitions are: (\d+)"
     )
-
     def before_case(self, log: Logger, **kwargs: Any) -> None:
         node: Node = kwargs["node"]
         if not isinstance(node.os, (CBLMariner)):
