@@ -8,9 +8,14 @@ import jwt
 from assertpy.assertpy import assert_that
 
 from lisa import Environment
+from lisa.base_tools.wget import Wget
 from lisa.executable import Tool
 from lisa.features import SerialConsole
+<<<<<<< HEAD
 from lisa.operating_system import CBLMariner, Posix, Ubuntu
+=======
+from lisa.operating_system import Posix
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 from lisa.testsuite import TestResult
 from lisa.tools import Cargo, Dmesg, Echo, Git, Make, Mkdir
 from lisa.util import UnsupportedDistroException
@@ -19,12 +24,21 @@ from lisa.util.process import ExecutableResult
 
 class AzureCVMAttestationTests(Tool):
     repo = "https://github.com/Azure/confidential-computing-cvm-guest-attestation"
+<<<<<<< HEAD
     cmd_path: PurePath
     repo_root: PurePath
+=======
+    cmd_path: str
+    repo_root: PurePosixPath
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
     @property
     def command(self) -> str:
         return str(self.cmd_path)
+<<<<<<< HEAD
+=======
+        # return "./AttestationClient"
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
     @property
     def can_install(self) -> bool:
@@ -59,19 +73,29 @@ class AzureCVMAttestationTests(Tool):
 
         self._save_attestation_report(json.dumps(report), log_path=log_path)
 
+<<<<<<< HEAD
     def _initialize(self, *args: Any, **kwargs: Any) -> None:
         if not isinstance(self.node.os, Ubuntu):
             raise UnsupportedDistroException(
                 self.node.os, "CVM attestation report tool supports only Ubuntu."
             )
 
+=======
+        self._save_kernel_logs(log_path=log_path)
+
+    def _initialize(self, *args: Any, **kwargs: Any) -> None:
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
         tool_path = self.get_tool_path(
             use_global=True,
         )
 
         self.repo_root = tool_path / "confidential-computing-cvm-guest-attestation"
         self.snp_report_tool_path = self.repo_root / "cvm-attestation-sample-app"
+<<<<<<< HEAD
         self.deb_file = (
+=======
+        self.azguestattestaion = (
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
             "https://packages.microsoft.com/repos/"
             "azurecore/pool/main/a/azguestattestation1/"
             "azguestattestation1_1.0.5_amd64.deb"
@@ -81,17 +105,29 @@ class AzureCVMAttestationTests(Tool):
     def _install(self) -> bool:
         self._install_dep_packages()
         git = self.node.tools[Git]
+<<<<<<< HEAD
         posix_os: Posix = cast(Posix, self.node.os)
+=======
+        wget = self.node.tools[Wget]
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
         root_path = self.get_tool_path(
             use_global=True,
         )
 
         git.clone(self.repo, root_path)
+<<<<<<< HEAD
 
         posix_os._install_package_from_url(
             self.deb_file, package_name="azguestattestation1.deb"
         )
+=======
+        self.node.execute("apt-get update", sudo=True)
+        deb_package = wget.get(
+            url=self.azguestattestaion,
+        )
+        self.node.execute(f"dpkg -i {deb_package}", sudo=True)
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
         self.node.execute(
             "cmake .",
             shell=True,
@@ -114,7 +150,26 @@ class AzureCVMAttestationTests(Tool):
             "nlohmann-json3-dev",
             "cmake",
         ]
+<<<<<<< HEAD
         posix_os.install_packages(package_list)
+=======
+        for package in list(package_list):
+            if posix_os.is_package_in_repo(package):
+                posix_os.install_packages(package)
+
+    def _save_kernel_logs(self, log_path: Path) -> None:
+        # Use serial console if available. Serial console logs can be obtained
+        # even if the node goes down (hung, panicked etc.). Whereas, dmesg
+        # can only be used if node is up and LISA is able to connect via SSH.
+        if self.node.features.is_supported(SerialConsole):
+            serial_console = self.node.features[SerialConsole]
+            serial_console.get_console_log(log_path, force_run=True)
+        else:
+            dmesg_str = self.node.tools[Dmesg].get_output(force_run=True)
+            dmesg_path = log_path / "dmesg"
+            with open(str(dmesg_path), "w") as f:
+                f.write(dmesg_str)
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
     def _save_attestation_report(self, output: str, log_path: Path) -> None:
         report_path = log_path / "cvm_attestation_report.txt"
@@ -122,6 +177,7 @@ class AzureCVMAttestationTests(Tool):
             f.write(output)
 
 
+<<<<<<< HEAD
 class SnpGuest(Tool):
     _snpguest_repo = "https://github.com/virtee/snpguest"
     cmd_path: PurePath
@@ -263,6 +319,8 @@ class SnpGuest(Tool):
         )
 
 
+=======
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 class NestedCVMAttestationTests(Tool):
     repo = "https://github.com/microsoft/confidential-sidecar-containers.git"
     cmd_path: str

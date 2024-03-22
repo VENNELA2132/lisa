@@ -12,6 +12,7 @@ from lisa import (
     TestSuiteMetadata,
 )
 from lisa.features.security_profile import CvmEnabled
+<<<<<<< HEAD
 from lisa.operating_system import CBLMariner, Ubuntu
 from lisa.sut_orchestrator import AZURE, CLOUD_HYPERVISOR
 from lisa.testsuite import TestResult, simple_requirement
@@ -23,6 +24,14 @@ from microsoft.testsuites.cvm.cvm_attestation_tool import (
     NestedCVMAttestationTests,
     SnpGuest,
 )
+=======
+from lisa.operating_system import Ubuntu
+from lisa.sut_orchestrator.azure import features
+from lisa.testsuite import TestResult, simple_requirement
+from lisa.tools import Ls
+from lisa.util import SkippedException
+from microsoft.testsuites.cvm.cvm_attestation_tool import NestedCVMAttestationTests
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
 
 @TestSuiteMetadata(
@@ -35,6 +44,7 @@ from microsoft.testsuites.cvm.cvm_attestation_tool import (
 class AzureCVMAttestationTestSuite(TestSuite):
     def before_case(self, log: Logger, **kwargs: Any) -> None:
         node: Node = kwargs["node"]
+<<<<<<< HEAD
         if not isinstance(node.os, Ubuntu) and not isinstance(node.os, CBLMariner):
             raise SkippedException(
                 UnsupportedDistroException(
@@ -47,6 +57,10 @@ class AzureCVMAttestationTestSuite(TestSuite):
             raise SkippedException(
                 "CVM attestation report supports only SEV-SNP (AMD) CPU."
             )
+=======
+        if not isinstance(node.os, Ubuntu):
+            raise SkippedException("This distro is not Ubuntu")
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
 
     @TestCaseMetadata(
         description="""
@@ -56,7 +70,10 @@ class AzureCVMAttestationTestSuite(TestSuite):
         priority=3,
         requirement=simple_requirement(
             supported_features=[CvmEnabled()],
+<<<<<<< HEAD
             supported_platform_type=[AZURE],
+=======
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
         ),
     )
     def verify_azure_cvm_attestation_report(
@@ -68,6 +85,7 @@ class AzureCVMAttestationTestSuite(TestSuite):
         result: TestResult,
         variables: Dict[str, Any],
     ) -> None:
+<<<<<<< HEAD
         if isinstance(node.os, Ubuntu):
             node.tools[AzureCVMAttestationTests].run_cvm_attestation(
                 result,
@@ -87,6 +105,16 @@ class AzureCVMAttestationTestSuite(TestSuite):
     """,
 )
 class NestedCVMAttestationTestSuite(TestSuite):
+=======
+        node.tools[AzureCVMAttestationTests].run_cvm_attestation(
+            result,
+            environment,
+            log_path,
+        )
+
+
+class CVMAttestationTestSuite(TestSuite):
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
     def before_case(self, log: Logger, **kwargs: Any) -> None:
         node = kwargs["node"]
         sev_guest_exists = node.tools[Ls].path_exists(
@@ -108,8 +136,12 @@ class NestedCVMAttestationTestSuite(TestSuite):
         """,
         priority=3,
         requirement=simple_requirement(
+<<<<<<< HEAD
             supported_features=[CvmEnabled()],
             supported_platform_type=[CLOUD_HYPERVISOR],
+=======
+            supported_features=[features.CVMNestedVirtualization],
+>>>>>>> bd4b6c7b1 (rename CVMAttestationTests to NestedCVMAttestationTests)
         ),
     )
     def verify_nested_cvm_attestation_report(
