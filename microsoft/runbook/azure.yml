@@ -3,29 +3,33 @@ include:
   - path: ./tiers/tier.yml
 variable:
   - name: location
-    value: "westus3"
+    value: westus
   - name: keep_environment
-    value: "no"
+    value: always
   - name: resource_group_name
-    value: ""
+    value: "ernis-xyz"
   - name: marketplace_image
+<<<<<<< HEAD
     value: ""
   - name: shared_gallery
     value: ""
   - name: community_gallery_image
     value: ""
+=======
+    value: "canonical 0001-com-ubuntu-confidential-vm-jammy 22_04-lts-cvm latest"
+>>>>>>> dbc917b0f (temp commit to test changes)
   - name: vhd
     value: ""
   - name: vm_size
-    value: ""
+    value: Standard_DC16ads_v5
   - name: deploy
-    value: true
+    value: True
   - name: wait_delete
-    value: false
+    value: true
   - name: concurrency
     value: 5
   - name: admin_private_key_file
-    value: ""
+    value: "C:\\Users\\ernis\\.ssh\\id_rsa"
     is_secret: true
   - name: admin_password
     value: ""
@@ -37,20 +41,46 @@ notifier:
 platform:
   - type: azure
     admin_private_key_file: $(admin_private_key_file)
-    admin_password: $(admin_password)
     keep_environment: $(keep_environment)
     azure:
       resource_group_name: $(resource_group_name)
       deploy: $(deploy)
-      subscription_id: $(subscription_id)
+      subscription_id: 0cc2a67a-58b9-4e4f-98a8-bfa46a28e896
       wait_delete: $(wait_delete)
     requirement:
-      core_count:
-        min: 2
+      features:
+        items:
+          - type: Security_Profile
+            security_profile: cvm
       azure:
         marketplace: $(marketplace_image)
+<<<<<<< HEAD
         shared_gallery: $(shared_gallery)
         community_gallery_image: $(community_gallery_image)
         vhd: $(vhd)
         location: $(location)
+=======
+        # location: $(location)
+>>>>>>> dbc917b0f (temp commit to test changes)
         vm_size: $(vm_size)
+# environment:
+#   environments:
+#     - nodes:
+#         - type: remote
+#           public_address: "52.237.74.203"
+#           public_port: "22"
+#           username: "lisatest"
+#           password: "password@123"
+#           private_key_file: $(admin_private_key_file)
+# platform:
+#   - type: ready
+#     # requirement:
+#     #     features:
+#     #       items:
+#     #         - type: Security_Profile
+#     #           security_profile: cvm
+testcase:
+  - criteria: 
+      area: cvm
+      category: functional
+      name: verify_azure_cvm_attestation_report
