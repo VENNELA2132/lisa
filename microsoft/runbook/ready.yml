@@ -3,13 +3,17 @@ include:
   - path: ./debug.yml
 variable:
   - name: user_name
-    value: "lisatest"
+    value: "ernis"
+  - name: password
+    value: "password@123"
   - name: public_port
     value: 22
   - name: origin
     value: tiers/tier.yml
   - name: case
     value: verify_cpu_count
+  - name: public_address
+    value: "10.209.11.154"
 notifier:
   - type: html
 environment:
@@ -19,10 +23,18 @@ environment:
           public_address: $(public_address)
           public_port: $(public_port)
           username: $(user_name)
-          private_key_file: $(admin_private_key_file)
-          capability:
-            disk:
-              data_disk_count:
-                min: 1
+          password: $(password)
+          # private_key_file: $(admin_private_key_file)
+          # capability:
+          #   disk:
+          #     data_disk_count:
+          #       min: 1
 platform:
   - type: ready
+
+testcase:
+  - criteria:
+      name: verify_cxl_latency
+      area: cpu
+      category: performance
+
