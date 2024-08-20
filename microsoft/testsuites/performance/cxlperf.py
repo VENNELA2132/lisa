@@ -1,6 +1,8 @@
 
 
 from pathlib import PurePath
+
+from assertpy.assertpy import assert_that
 from lisa.base_tools.uname import Uname
 from lisa.base_tools.wget import Wget
 from lisa.environment import Environment
@@ -15,7 +17,9 @@ from lisa import (
     simple_requirement,
 )
 from lisa.operating_system import Ubuntu
+from lisa.tools.echo import Echo
 from lisa.tools.mkdir import Mkdir
+from lisa.tools.numactl import Numactl
 from lisa.tools.tar import Tar
 from lisa.util import UnsupportedDistroException
 from lisa.util.logger import Logger
@@ -23,7 +27,7 @@ from lisa.util.logger import Logger
 
 @TestSuiteMetadata(
     area="cpu",
-    category="performance",
+    category="functional",
     description="""
     This test suite verifies the latency of cxl node when compared to numa node
     """,
@@ -49,10 +53,13 @@ class CXLPerformance(TestSuite):
         #check for available nodes
         #confirm that the last node does not contain any cpus
 
-        result = node.execute("numactl -H")
-        print("VENNELA",result)
-        cxl_node,numa_nodes = self.get_cxl_node_and_numa_nodes(str(result))
-        print("VENNELA",cxl_node,numa_nodes)
+        # result = node.execute("numactl -H") # create a tool
+        # print("VENNELA",result)
+        # cxl_node,numa_nodes = self.get_cxl_node_and_numa_nodes(str(result))
+        # print("VENNELA",cxl_node,numa_nodes)
+        numactl_tool = node.tools[Numactl]
+        cxl_node = numactl_tool.get_cxl_node()
+        numa_nodes = numactl_tool.get_numa_nodes()
         #Run sysbench which required parameters for cxl and numa
         #check for execution time and speed of execution to transfer 8gb
         #Sysbench output as follows -->
@@ -65,19 +72,32 @@ class CXLPerformance(TestSuite):
         #General statistis:
         #   total time:     44.6566s
         #......
-        sysbench_cxl_output = node.execute(f"numactl --membind {cxl_node} sysbench --threads=1 memory --memory-scope=local --memory-oper=write --memory-block-size=8g --memory-access-mode=rnd run")
-        print(sysbench_cxl_output)
-        cxl_speed , cxl_time = self.sysbench_output_extract(str(sysbench_cxl_output))
-        print(cxl_speed,cxl_time)
+        # sysbench_cxl_output = node.execute(f"numactl --membind {cxl_node} sysbench --threads=1 memory --memory-scope=local --memory-oper=write --memory-block-size=8g --memory-access-mode=rnd run")
+        # print(sysbench_cxl_output)
+        # cxl_speed , cxl_time = self.sysbench_output_extract(str(sysbench_cxl_output))
+        # print(cxl_speed,cxl_time)
+
+        sysbench_cxl_output = numactl_tool.get_sysbench_memory_output(nodeId=cxl_node,threads=1,memory_scope="local",memory_access_mode="rnd",memory_block_size="8g",memory_oper="write")
         
+        cxl_speed = numactl_tool.get_node_speed(sysbench_cxl_output)
+        cxl_time = numactl_tool.get_node_time(sysbench_cxl_output)
+
+        # for i in range(numa_nodes):
+        #     sysbench_numa_output = node.execute(f"numactl --membind {i} sysbench --threads=1 memory --memory-scope=local --memory-oper=write --memory-block-size=8g --memory-access-mode=rnd run")
+        #     print(sysbench_numa_output)
+        #     numa_speed , numa_time = self.sysbench_output_extract(str(sysbench_numa_output))
+        #     print(numa_speed,numa_time)
+        #     #Confirm that speed of cxl node is less than numa node and time taken for CXL node is more than that of numa node
+        #     if not (cxl_speed<numa_speed and cxl_time>numa_time): #assert_that
+        #         raise LisaException()
+
         for i in range(numa_nodes):
-            sysbench_numa_output = node.execute(f"numactl --membind {i} sysbench --threads=1 memory --memory-scope=local --memory-oper=write --memory-block-size=8g --memory-access-mode=rnd run")
-            print(sysbench_numa_output)
-            numa_speed , numa_time = self.sysbench_output_extract(str(sysbench_numa_output))
-            print(numa_speed,numa_time)
+            sysbench_numa_output = numactl_tool.get_sysbench_memory_output(nodeId=i,threads=1,memory_scope="local",memory_access_mode="rnd",memory_block_size="8g",memory_oper="write")
+            numa_speed = numactl_tool.get_node_speed(sysbench_numa_output)
+            numa_time = numactl_tool.get_node_time(sysbench_numa_output)
             #Confirm that speed of cxl node is less than numa node and time taken for CXL node is more than that of numa node
-            if not (cxl_speed<numa_speed and cxl_time>numa_time):
-                raise LisaException()
+            assert_that(cxl_speed,"CXL node should be less than the Numa Node {i} speed").is_less_than(numa_speed)
+            assert_that(cxl_time,"CXL node time should be more than Numa Node {i} time").is_greater_than(numa_time)
         
         print("VENNELA sysbench executed succesfully")
         #wget memory latency checker (mlc) 
@@ -90,7 +110,7 @@ class CXLPerformance(TestSuite):
         #Measuring idle latencies for random access (in ns)...
         #           Numa node
         # Numa node           0       1       2
-        #      0         130.2  231.2   265.7
+        #      0         130.2  231.2   265.7      [[130,231],[238,130]]   [265,368]
         #      1         238.2  130.1   368.7
         #...
         #Measuring Memory Bandwidths between nodes within system
@@ -102,8 +122,11 @@ class CXLPerformance(TestSuite):
         #...
         
         cmd_path = self.download(mlc_pkg,node)
-        echo_cmd="echo 4000 > /proc/sys/vm/nr_hugepages"
-        node.execute(echo_cmd,sudo=True,sudo=True,shell=True)
+        # echo_cmd="echo 4000 > /proc/sys/vm/nr_hugepages"
+        echo = node.tools[Echo]
+        # echo.run("4000 > /proc/sys/vm/nr_hugepages",sudo=True,shell=True)
+        echo.write_to_file("4000","/proc/sys/vm/nr_hugepages",sudo=True)
+        # node.execute(echo_cmd,sudo=True,sudo=True,shell=True)
         mlc_output = node.execute("./mlc",sudo=True,cwd=cmd_path)
         print("VENNELA mlc o/p",mlc_output)
         print("-----------------------------------")
@@ -129,9 +152,7 @@ class CXLPerformance(TestSuite):
         else:
             raise UnsupportedDistroException(
                 node.os,
-                "Only CentOS 7.6-8.3, Ubuntu 18.04-22.04 distros are "
-                "supported by the HPC team. Also supports CBLMariner 2.0 "
-                "distro which uses the Mellanox inbox driver",
+                "Ubuntu distros are supported",
             )
         
     def get_cxl_node_and_numa_nodes(self, output: str) -> str:
