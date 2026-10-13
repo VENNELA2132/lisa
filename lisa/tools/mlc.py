@@ -1,65 +1,26 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
 import re
-from dataclasses import dataclass, field
-from typing import Any, List, Optional, Set, Type
+from pathlib import PurePath
+from typing import Dict, List
 
-from lisa.base_tools.wget import Wget
 from lisa.executable import Tool
-from lisa.operating_system import Redhat, Suse, Ubuntu
-from lisa.tools import Dmesg
+from lisa.tools.curl import Curl
 from lisa.tools.echo import Echo
+from lisa.tools.ln import Ln
 from lisa.tools.tar import Tar
-from lisa.util import LisaException, find_groups_in_lines
+from lisa.util import LisaException
 from lisa.util.process import ExecutableResult
-
-from .ln import Ln
-from .python import Python
 
 
 class Mlc(Tool):
-    _mlc_pkg = "https://downloadmirror.intel.com/822971/mlc_v3.11a.tgz"
-    # Intel(R) Memory Latency Checker - v3.11
-    # ....
-    # Measuring idle latencies for random access (in ns)...
-    #
-    #          Numa node
-    #
-    # Numa node           0       1       2
-    #
-    #     0         130.2  231.2   265.7
-    #
-    #     1         238.2  130.1   368.7
-    # ....
-    __mlc_latencies = re.compile(
-        r"Measuring idle latencies for random access \(in ns\)\.\.\.\n\n\s+"
-        r"Numa node\n\n"
-        r"Numa node(?:\s+\d)+(?:\n\n\s+\d(?:\s+\d+\.\d+)+)+"
+    _mlc_package_url = "https://downloadmirror.intel.com/926327/mlc_v3.13.tgz"
+    _mlc_package_name = "mlc_v3.13.tgz"
+    _table_header_pattern = re.compile(r"^\s*Numa node\s+((?:\d+\s*)+)$")
+    _table_row_pattern = re.compile(
+        r"^\s*(?P<node>\d+)\s+(?P<values>(?:\d+(?:\.\d+)?\s*)+)$"
     )
-    # Intel(R) Memory Latency Checker - v3.11
-    # ....
-    # Measuring Memory Bandwidths between nodes within system
-    #
-    # Bandwidths are in MB/sec (1 MB/sec = 1,000,000 Bytes/sec)
-    #
-    # Using all the threads from each core if Hyper-threading is enabled
-    #
-    # Using Read-only traffic type
-    #
-    #              Numa node
-    #
-    # Numa node           0       1       2
-    #
-    #     0        79808.6 60065.8 31322.0
-    #
-    #     1        68081.3 78793.6 27324.0
-    # ....
-    __mlc_bandwidths = re.compile(
-        r"Measuring Memory Bandwidths between nodes within system\n\n"
-        r"(?:.*\n)*?"
-        r"\s+Numa node\n\n"
-        r"Numa node(?:\s+\d)+(?:\n\n\s+\d(?:\s+\d+\.\d+)+)+"
-    )
-
-    __node_data = re.compile("(\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)")
 
     @property
     def command(self) -> str:
@@ -69,51 +30,94 @@ class Mlc(Tool):
     def can_install(self) -> bool:
         return True
 
-    def _install_from_src(self) -> None:
-        tar = self.node.tools[Tar]
-        ln = self.node.tools[Ln]
-        curl = self.node.tools["Curl"]
-        curl.fetch(
-            url=self._mlc_pkg, arg="-L -o mlc_v3.11b.tgz", execute_arg="", sudo=True
+    def _install(self) -> bool:
+        package_path = self.node.working_path.joinpath(self._mlc_package_name)
+        extract_path = self.node.working_path.joinpath("mlc")
+        self.node.tools[Curl].fetch(
+            url=self._mlc_package_url,
+            arg=f"-L -o {package_path}",
+            execute_arg="",
         )
-        file_path = self.node.working_path.joinpath("mlc_v3.11b.tgz")
-        tar.extract(file=file_path, dest_dir=self.node.working_path.joinpath("mlc"))
-        if self.node.is_posix:
-            ln.create_link(
-                self.node.working_path.joinpath("mlc/Linux/mlc"), "/usr/bin/mlc"
-            )
-        else:
-            ln.create_link(
-                self.node.working_path.joinpath("mlc/Windows/mlc"), "/usr/bin/mlc"
-            )
-
-    def install(self) -> bool:
-        self._install_from_src()
+        self.node.tools[Tar].extract(
+            file=str(package_path),
+            dest_dir=str(extract_path),
+        )
+        self.node.tools[Ln].create_link(
+            target=str(extract_path.joinpath("Linux", "mlc")),
+            link="/usr/local/bin/mlc",
+            force=True,
+        )
         return self._check_exists()
 
     def get_mlc_output(self) -> ExecutableResult:
-        echo = self.node.tools[Echo]
-        echo.write_to_file("4000", "/proc/sys/vm/nr_hugepages", sudo=True)
+        self.node.tools[Echo].write_to_file(
+            "4000", PurePath("/proc/sys/vm/nr_hugepages"), sudo=True
+        )
+        return self.run(
+            sudo=True,
+            timeout=1800,
+            expected_exit_code=0,
+            expected_exit_code_failure_message=(
+                "MLC failed to measure memory performance"
+            ),
+        )
 
-        return self.run()
+    def get_latency_data(self, output: ExecutableResult) -> Dict[int, Dict[int, float]]:
+        return self._parse_table(
+            output.stdout,
+            "Measuring idle latencies for random access",
+        )
 
-    def get_latency_data(self):
-        output = self.get_mlc_output()
-        latency_data = self.__mlc_latencies.findall(output.stdout)
+    def get_bandwidth_data(
+        self, output: ExecutableResult
+    ) -> Dict[int, Dict[int, float]]:
+        return self._parse_table(
+            output.stdout,
+            "Measuring Memory Bandwidths between nodes within system",
+        )
 
-        return latency_data[0]
+    def get_node_details(
+        self, node_id: int, data: Dict[int, Dict[int, float]]
+    ) -> List[float]:
+        missing_sources = [
+            source_node for source_node, values in data.items() if node_id not in values
+        ]
+        if missing_sources:
+            raise LisaException(
+                f"MLC output has no values for node {node_id} from source nodes "
+                f"{missing_sources}"
+            )
+        return [values[node_id] for values in data.values()]
 
-    def get_bandwidth_data(self):
-        output = self.get_mlc_output()
-        bandwidth_data = self.__mlc_bandwidths.findall(output.stdout)
+    def _parse_table(
+        self, output: str, section_marker: str
+    ) -> Dict[int, Dict[int, float]]:
+        section_start = output.find(section_marker)
+        if section_start < 0:
+            raise LisaException(f"MLC output does not contain '{section_marker}'")
 
-        return bandwidth_data[0]
+        node_ids: List[int] = []
+        rows: Dict[int, Dict[int, float]] = {}
+        for line in output[section_start:].splitlines():
+            if not node_ids:
+                header_match = self._table_header_pattern.match(line)
+                if header_match:
+                    node_ids = [
+                        int(node_id) for node_id in header_match.group(1).split()
+                    ]
+                continue
 
-    def get_node_details(self, node_id, data):
-        matches = self.__node_data.findall(data)
-        ans = []
-        for match in matches:
-            row = match[1:]
-            ans.append(float(row[node_id]))
+            row_match = self._table_row_pattern.match(line)
+            if row_match:
+                values = [float(value) for value in row_match.group("values").split()]
+                if len(values) != len(node_ids):
+                    raise LisaException(
+                        "MLC table column count does not match its NUMA node header"
+                    )
+                rows[int(row_match.group("node"))] = dict(zip(node_ids, values))
+            elif rows and line.strip():
+                break
 
-        return ans
+        if not rows:
+            raise LisaException(f"MLC output has no data for '{section_marker}'")
+        return rows
